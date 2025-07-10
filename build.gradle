@@ -1,0 +1,49 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+}
+
+/*
+To reproduce error run:
+
+./gradlew clean
+./gradlew generatePomFile
+ */
+
+abstract class GenerateFileTask extends DefaultTask {
+    @OutputFile
+    abstract RegularFileProperty getOutputFile()
+
+    @Input
+    abstract Property<String> getContent()
+
+    @TaskAction
+    void generate() {
+        outputFile.get().asFile.text = content.get()
+    }
+}
+
+def generateFile = tasks.register('generateFile', GenerateFileTask) {
+    outputFile.set(layout.buildDirectory.file('generated.json'))
+    content.set('{"foo":"bar"}')
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+
+            from components.java
+            pom {
+                properties.put(
+                        'generated-json',
+                        generateFile.map { java.nio.file.Files.readString(it.outputFile.getAsFile().get().toPath()) }
+                )
+            }
+        }
+    }
+}
+
+tasks.withType(GenerateMavenPom).configureEach {
+    dependsOn generateFile
+    notCompatibleWithConfigurationCache("The same error occurs if this isn't disabled but the configuration cache report is not generated")
+}
